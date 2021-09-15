@@ -1,8 +1,22 @@
 import numpy as np
 import cv2
-  
+import mido 
+
+# barcodes
+qrDecoder = cv2.QRCodeDetector()
 # Capturing video through webcam
 webcam = cv2.VideoCapture(0)
+#open midi ports
+
+ports = mido.get_output_names()
+
+outport = mido.open_output(ports[1])
+
+colorBGR = {
+        "red": (0,0,255),
+        "green": (0,255,0),
+        "blue": (255,0,0)
+    }
 
 colorRange = {
     "red": {
@@ -18,6 +32,8 @@ colorRange = {
         "upper": [120, 255, 255]
     }
 }
+
+lastOn =[]
 
 # convert array into uint8
 def uintArr(input):
@@ -58,12 +74,8 @@ while(1):
                               mask = masks[color])
  
     # Creating contour to track red color
-    colorBGR = {
-        "red": (0,0,255),
-        "green": (0,255,0),
-        "blue": (255,0,0)
-    }
-
+    audioMsg = []
+    currentOn = []
     for color in colorRange.keys():
         
         contours, hierarchy = cv2.findContours(masks[color],
@@ -74,20 +86,41 @@ while(1):
             area = cv2.contourArea(contour)
             if(area > 600):
                 x, y, w, h = cv2.boundingRect(contour)
+
+                note =40 +  int((y + h/2) /height * 60)
+                note = int(note /2) *2 +1
+                #print (note)
+                msg = mido.Message('note_on', note= note)
+                audioMsg.append(msg)
+                currentOn.append(note)
                 imageFrame = cv2.rectangle(imageFrame, (x, y), 
                                         (x + w, y + h), 
                                         colorBGR[color], 2)
                 
                 cv2.putText(imageFrame, color, (x, y),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0,
-                            colorBGR[color])    
+                            colorBGR[color])  
+        
+        for note in lastOn:
+            msg = mido.Message('note_off', note= note)
+            audioMsg.append(msg)
+
+        lastOn = currentOn
+        for msg in audioMsg:
+            outport.send(msg)
+        
+
   
     #----------------
   
               
     # Program Termination
-    cv2.imshow("Multiple Color Detection", imageFrame)
+    cv2.imshow("color2audio", imageFrame)
     if cv2.waitKey(10) & 0xFF == ord('q'):
+        for note in lastOn:
+            msg = mido.Message('note_off', note= note)
+            audioMsg.append(msg)
+        outport.close()
         cap.release()
         cv2.destroyAllWindows()
         break
