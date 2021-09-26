@@ -5,7 +5,7 @@ import mido
 # barcodes
 qrDecoder = cv2.QRCodeDetector()
 # Capturing video through webcam
-webcam = cv2.VideoCapture(0)
+webcam = cv2.VideoCapture(1)
 #open midi ports
 
 ports = mido.get_output_names()
@@ -35,21 +35,34 @@ colorRange = {
 
 lastOn =[]
 
+currentType= "free"
+
 # convert array into uint8
 def uintArr(input):
     return np.array(input, np.uint8)
 
+
+         
 # Start a while loop
 while(1):
       
     # Reading the video from the webcam
     _, imageFrame = webcam.read()
+
+    data,bbox,rectifiedImage = qrDecoder.detectAndDecode(imageFrame)
+    
+    if len(data)>0:
+        #print (data)
+        currentType = data
+        cv2.putText(imageFrame, data, (1, 1),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.0,
+                            (255,255,255)) 
   
     #block out certain parts
     dimensions = imageFrame.shape
-    width = int((dimensions[1] / 2))
-    height = dimensions[0]
-    imageFrame = cv2.rectangle(imageFrame, (0, 0), (width,height), (0,0,0), -1)
+    width = dimensions[1]
+    height =  dimensions[0]
+    #imageFrame = cv2.rectangle(imageFrame, (0, int((dimensions[0] / 16))), (width,height), (0,0,0), -1)
     
     # Convert the imageFrame from BGR to HSV
     hsvFrame = cv2.cvtColor(imageFrame, cv2.COLOR_BGR2HSV)
@@ -73,7 +86,6 @@ while(1):
         res[color] =   cv2.bitwise_and(imageFrame, imageFrame, 
                               mask = masks[color])
  
-    # Creating contour to track red color
     audioMsg = []
     currentOn = []
     for color in colorRange.keys():
@@ -84,11 +96,15 @@ while(1):
 
         for pic, contour in enumerate(contours):
             area = cv2.contourArea(contour)
-            if(area > 600):
+            if(area > 300):
                 x, y, w, h = cv2.boundingRect(contour)
-
-                note =40 +  int((y + h/2) /height * 60)
-                note = int(note /2) *2 +1
+                note = 0
+                if currentType == "free":
+                    note = 40 +  int((y + w/2) /width * 60)
+                    note = int(note /2) *2 +1
+                else:
+                    a = y / width 
+                    note = 60 + (int(8 * a )*2)
                 #print (note)
                 msg = mido.Message('note_on', note= note)
                 audioMsg.append(msg)
